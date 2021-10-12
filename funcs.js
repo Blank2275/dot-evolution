@@ -1,3 +1,15 @@
+//keep track of what chunk a dot is in
+var chunks = [];
+var chunkSize = 100;
+function resetChunks(){
+    chunks = [];
+    for(var y = 0; y < Math.ceil(height / chunkSize); y++){
+        chunks.push([]);
+        for(var x = 0; x < Math.ceil(width / chunkSize); x++){
+            chunks[y].push([]);
+        }
+    }
+}
 class World{
     constructor(numDots,w, h){
         this.dots = [];
@@ -43,6 +55,7 @@ class World{
         this.dots.push(dot);
     }
     runFrame(){
+        chunks = resetChunks();
         this.updateFood();
         var dotsToKill = [];
         for(let dot in this.dots){
@@ -52,6 +65,12 @@ class World{
             var xTile = Math.floor(x / this.foodResolution);
             var yTile = Math.floor(y / this.foodResolution);
             var sprinting = this.dots[dot].sprinting;
+            //add dot to chunk
+            var chunkX = Math.floor(x / chunkSize);
+            var chunkY = Math.floor(y / chunkSize);
+            if(x > 0 && y > 0 && x < chunks[0].length && y < chunks.length){
+                chunks[chunkY][chunkX].push(dot);
+            }
             var sprintingMultiplier = sprinting ? 7 : 1; //if dot is sprinting, make it exhause food tile quicker for balancing
             if(xTile < this.xTiles && yTile < this.yTiles && xTile > 0 && yTile > 0){
                 this.food[yTile][xTile] -=  this.eatRate * this.eatMultiplier * sprintingMultiplier;
@@ -99,7 +118,29 @@ class World{
         }
     }
 }
+class Preadetor{
+    constructor(x, y, direction){
+        this.x = x;
+        this.y = y;
+        this.direction = direction;
+        this.movementSpeed = 1.5; //1.5 x speed of a dot
+    }
+    runFrame(){
+        //randomly turn 0.3% of frames
+        if(Math.random() < 0.003){
+            this.direction += Math.random() * Math.PI * 2 - Math.PI; //random from -pi to pi
+        }
+        this.x += Math.cos(this.direction) * this.movementSpeed;
+        this.y += Math.sin(this.direction) * this.movementSpeed;
 
+        if(this.x < 10 || this.x > width - 10){
+
+        }
+        if(this.y < 10 || this.y > height - 10){
+            
+        }
+    }
+}
 class Dot{
     constructor(x, y, direction, foodResolution){
         var numConditions = Math.floor(Math.random() * 5);
@@ -186,6 +227,7 @@ class Dot{
 class Brain{
     constructor(numConditions){
         this.conditions = [];
+        this.inputOptions = ["direction", "x", "y", "onRed", "foodDirection"];
         for(var i = 0; i < numConditions; i++){
             this.conditions.push(this.genCondition());
         }
@@ -207,7 +249,7 @@ class Brain{
             //50% chance of changing inputs, 20% chanc of changing operators, 30% chance of changeing response
             //one will always be chosen
 
-            var inputOptions = ["direction", "x", "y"];
+            var inputOptions = this.inputOptions;
             var operatorOptions = ["&&", "||"];
             var comparisonOptions = [">", "<"];
 
@@ -238,7 +280,7 @@ class Brain{
     }
     genCondition(){
         var numInputs = [];
-        var inputOptions = ["direction", "x", "y", "onRed", "foodDirection"];
+        var inputOptions = this.inputOptions;
         var operatorOptions = ["&&", "||"];
         var comparisonOptions = [">", "<"];
         var result = {
