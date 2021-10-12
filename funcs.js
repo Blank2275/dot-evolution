@@ -55,8 +55,8 @@ class World{
             var sprintingMultiplier = sprinting ? 7 : 1; //if dot is sprinting, make it exhause food tile quicker for balancing
             if(xTile < this.xTiles && yTile < this.yTiles && xTile > 0 && yTile > 0){
                 this.food[yTile][xTile] -=  this.eatRate * this.eatMultiplier * sprintingMultiplier;
-                if(this.food[yTile][xTile] > 0 && this.food[yTile][xTile] < this.eatRate * this.eatMultiplier * sprintingMultiplier){
-                    this.food[yTile][xTile] = this.eatRate * this.eatMultiplier * sprintingMultiplier + 0.01;
+                if(this.food[yTile][xTile] > 0 && this.food[yTile][xTile] < this.eatRate * this.eatMultiplier * 7 + 0.02){
+                    this.food[yTile][xTile] = this.eatRate * this.eatMultiplier * 7 + 0.03;
                 }
                 if(this.food[yTile][xTile] > 1){
                     this.food[yTile][xTile] = 1;
