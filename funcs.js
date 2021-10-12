@@ -146,6 +146,8 @@ class Predator{
         this.world = world;
         this.detectionRange = 100;
         this.killRange = 15;
+        this.target = false;
+        this.targetSwitchDistance = 20;
     }
     runFrame(){
         //randomly turn 0.3% of frames
@@ -176,11 +178,14 @@ class Predator{
             if(distance < this.detectionRange && distance < closestDistance){
                 closestDistance = distance;
                 closest = d;
+                if(!this.target || distance < this.targetSwitchDistance){
+                    this.target = dot;
+                }
             }
         }
         if(closest != -1){
             //dot detected code to target it;
-            var dot = this.world.dots[closest];
+            var dot = this.target;
             var x = dot.x;
             var y = dot.y;
             var angleTo = Math.atan2(y - this.y, x - this.x);
