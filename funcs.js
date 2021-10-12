@@ -21,7 +21,7 @@ class World{
         this.food = [];
         this.w = w;
         this.h = h;
-        this.numPredators = 7;
+        this.numPredators = 3;
         //bigger the number the less dangerous
         this.redDanger = 260;
         //how fast eating food will exhaust a tile
@@ -31,7 +31,7 @@ class World{
             this.food.push([]);
             for(var x = 0; x < this.xTiles; x++){
                 this.food[y].push(1)
-                if((noise.noise2D(x / 10, y / 10) + 1) / 2 < 0.2){
+                if((noise.noise2D(x / 10, y / 10) + 1) / 2 < 0.1){
                     this.food[y][x] = -1;
                 }
             }
@@ -53,7 +53,7 @@ class World{
         if(parent){
             direction = parent.direction + (Math.random() *( Math.PI / 2) - (Math.PI / 4));
         }
-        var dot = new Dot(x, y, direction, this.foodResolution);
+        var dot = new Dot(x, y, direction, this.foodResolution, this);
         if(parent && false){
             //copy parents brain so changing child won't change parent
             dot.brain = Object.assign(Object.create(Object.getPrototypeOf(parent.brain)), parent.brain);
@@ -86,17 +86,17 @@ class World{
             if(chunkX > 0 && chunkY > 0 && chunkX < chunks[0].length && chunkY < chunks.length){
                 chunks[chunkY][chunkX].push(dot);
             }
-            var sprintingMultiplier = sprinting ? 7 : 1; //if dot is sprinting, make it exhause food tile quicker for balancing
+            var sprintingMultiplier = sprinting ? 4 : 1; //if dot is sprinting, make it exhause food tile quicker for balancing
             if(xTile < this.xTiles && yTile < this.yTiles && xTile > 0 && yTile > 0){
                 this.food[yTile][xTile] -=  this.eatRate * this.eatMultiplier * sprintingMultiplier;
-                if(this.food[yTile][xTile] > 0 && this.food[yTile][xTile] < this.eatRate * this.eatMultiplier * sprintingMultiplier){
-                    this.food[yTile][xTile] = this.eatRate * this.eatMultiplier * sprintingMultiplier + 0.01;
+                if(this.food[yTile][xTile] > 0 && this.food[yTile][xTile] < this.eatRate * this.eatMultiplier * 7+ 0.01){
+                    this.food[yTile][xTile] = this.eatRate * this.eatMultiplier * 4 + 0.02;
                 }
                 if(this.food[yTile][xTile] > 1){
                     this.food[yTile][xTile] = 1;
                 }
                 if(this.food[yTile][xTile] > 0){
-                    this.dots[dot].food += Math.min(this.eatRate, this.food[yTile][xTile] - 0.2);
+                    this.dots[dot].food += Math.min(this.eatRate, this.food[yTile][xTile]- 0.03);
                 } else{
                     this.dots[dot].food += this.food[yTile][xTile] / this.redDanger;
                 }
@@ -116,8 +116,15 @@ class World{
             this.predators[predator].runFrame();
             this.predators[predator].display();
         }
+        //was buggy, deleted some extra dots
         for(let dot in this.dotsToKill){
-            this.dots.splice(dotsToKill[dot] - dot, 1);
+            this.dots[dot].toKill = true;
+        }
+        var i = this.dots.length - 1;
+        for(i; i >=0; i--){
+            if(this.dots[i].toKill){
+                this.dots.splice(i, 1);
+            }
         }
     }
     updateFood(){
@@ -220,7 +227,7 @@ class Predator{
     }
 }
 class Dot{
-    constructor(x, y, direction, foodResolution){
+    constructor(x, y, direction, foodResolution, world){
         var numConditions = Math.floor(Math.random() * 5);
         this.brain = new Brain(numConditions);
         this.direction = direction;
@@ -233,6 +240,7 @@ class Dot{
         this.sprintHunger = 0.007;
         this.foodResolution = foodResolution;
         this.sprinting = false;
+        this.world = world;
     }
     runFrame(food){
         var xTile = Math.floor(this.x / this.foodResolution);
@@ -261,7 +269,15 @@ class Dot{
         }
         //find angle to that point
         var foodDirection = Math.atan2(foodLoc[0] - xTile, foodLoc[1] - yTile);
-        var instructions = this.brain.runFrame(this.direction, this.x, this.y, onRed, foodDirection);
+        //distance to nearest predator
+        var minDist = 10000;
+        for(var predator of this.world.predators){
+            var predX = predator.x;
+            var predY = predator.y;
+            var distance = dist(predX, predY, this.x, this.y);
+            minDist = Math.min(minDist, distance);
+        }
+        var instructions = this.brain.runFrame(this.direction, this.x, this.y, onRed, foodDirection, minDist);
         var direction = instructions[0];
         var movementMultiplier = 1;                                  
         if(direction != this.direction){
@@ -305,7 +321,8 @@ class Dot{
 class Brain{
     constructor(numConditions){
         this.conditions = [];
-        this.inputOptions = ["direction", "x", "y", "onRed", "foodDirection"];
+        this.predatorSensingDistance = 90; //maxiumum value
+        this.inputOptions = ["direction", "x", "y", "onRed", "foodDirection", "predatorDistance"];
         for(var i = 0; i < numConditions; i++){
             this.conditions.push(this.genCondition());
         }
@@ -388,6 +405,8 @@ class Brain{
                 val = Math.random() * 2 - 1;
             } else if(input == "foodDirection"){
                 val = Math.random() * Math.PI * 4 - Math.PI * 2;
+            } else if(input == "predatorDistance"){
+                val = Math.random() * this.predatorSensingDistance;
             }
             var comparison = comparisonOptions[Math.floor(Math.random() * comparisonOptions.length)];
             var operator = operatorOptions[Math.floor(Math.random() * operatorOptions.length)];    
@@ -399,7 +418,7 @@ class Brain{
         }
         return result;
     }
-    runFrame(direction, x, y, onRed, foodDirection){
+    runFrame(direction, x, y, onRed, foodDirection, predatorDistance){
         for(var condition of this.conditions){
             var inputs = condition["inputs"];
             var operators = condition["operators"];
