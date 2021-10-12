@@ -9,16 +9,19 @@ function resetChunks(){
             chunks[y].push([]);
         }
     }
+    return chunks;
 }
 class World{
     constructor(numDots,w, h){
         this.dots = [];
+        this.predators = [];
         this.foodResolution = 30;
         this.xTiles = Math.ceil(w / this.foodResolution);
         this.yTiles = Math.ceil(h / this.foodResolution);
         this.food = [];
         this.w = w;
         this.h = h;
+        this.numPredators = 7;
         //bigger the number the less dangerous
         this.redDanger = 260;
         //how fast eating food will exhaust a tile
@@ -38,6 +41,10 @@ class World{
         for(var i = 0; i < numDots; i++){
             this.addDot();
         }
+        for(var i = 0; i < this.numPredators; i++){
+            this.addPredator();
+        }
+        this.dotsToKill = [] // so predator class can add to it
     }
     addDot(x, y, parent){
         var x = x ? x + Math.random() * 10 - 5 :  Math.random() * 40 - 20 + this.w* 0.51;
@@ -54,7 +61,15 @@ class World{
         }
         this.dots.push(dot);
     }
+    addPredator(){
+        var x = Math.random() * width;
+        var y = Math.random() * height;
+        var direction = Math.random() * Math.PI * 2;
+        var predator = new Predator(x, y, direction, this);
+        this.predators.push(predator);
+    }
     runFrame(){
+        this.dotsToKill = []
         chunks = resetChunks();
         this.updateFood();
         var dotsToKill = [];
@@ -68,7 +83,7 @@ class World{
             //add dot to chunk
             var chunkX = Math.floor(x / chunkSize);
             var chunkY = Math.floor(y / chunkSize);
-            if(x > 0 && y > 0 && x < chunks[0].length && y < chunks.length){
+            if(chunkX > 0 && chunkY > 0 && chunkX < chunks[0].length && chunkY < chunks.length){
                 chunks[chunkY][chunkX].push(dot);
             }
             var sprintingMultiplier = sprinting ? 7 : 1; //if dot is sprinting, make it exhause food tile quicker for balancing
@@ -88,7 +103,7 @@ class World{
             }
             this.dots[dot].display();
             if(this.dots[dot].food < 0.1){
-                dotsToKill.push(dot);
+                this.dotsToKill.push(dot);
             }
             if(this.dots[dot].food > 2){
                 this.dots[dot].x + Math.random() * 10 - 5;
@@ -97,7 +112,11 @@ class World{
                 this.addDot(x, y, this.dots[dot]);
             }
         }
-        for(let dot in dotsToKill){
+        for(var predator in this.predators){
+            this.predators[predator].runFrame();
+            this.predators[predator].display();
+        }
+        for(let dot in this.dotsToKill){
             this.dots.splice(dotsToKill[dot] - dot, 1);
         }
     }
@@ -118,27 +137,81 @@ class World{
         }
     }
 }
-class Preadetor{
-    constructor(x, y, direction){
+class Predator{
+    constructor(x, y, direction, world){
         this.x = x;
         this.y = y;
         this.direction = direction;
         this.movementSpeed = 1.5; //1.5 x speed of a dot
+        this.world = world;
+        this.detectionRange = 100;
+        this.killRange = 15;
     }
     runFrame(){
         //randomly turn 0.3% of frames
-        if(Math.random() < 0.003){
+        if(Math.random() < 0.005){
             this.direction += Math.random() * Math.PI * 2 - Math.PI; //random from -pi to pi
         }
+        
+        var chunkX = Math.floor(this.x / chunkSize);
+        var chunkY = Math.floor(this.y / chunkSize);
+        
+        //get all dots in neighboring chunks
+        var dotsInRange = [];
+        for(var x = chunkX - 1; x <= chunkX + 1; x++){
+            for(var y = chunkY - 1; y <= chunkY + 1; y++){
+                //if on screen
+                if(chunkX >= 0 && chunkX <= chunks[0].length && chunkY <= chunks.length && chunkY >= 0){
+                    dotsInRange = dotsInRange.concat(chunks[chunkY][chunkX]);
+                }
+            }
+        }
+        var closest = -1;
+        var closestDistance = 99999999;
+        for(var d of dotsInRange){
+            var dot = this.world.dots[d];
+            var x = dot.x;
+            var y = dot.y;
+            var distance = dist(x, y, this.x, this.y);
+            if(distance < this.detectionRange && distance < closestDistance){
+                closestDistance = distance;
+                closest = d;
+            }
+        }
+        if(closest != -1){
+            //dot detected code to target it;
+            var dot = this.world.dots[closest];
+            var x = dot.x;
+            var y = dot.y;
+            var angleTo = Math.atan2(y - this.y, x - this.x);
+            this.direction = angleTo;
+            if(dist(x, y, this.x, this.y) < this.killRange){
+                this.world.dotsToKill.push(closest);
+            }
+        }        
+        
         this.x += Math.cos(this.direction) * this.movementSpeed;
         this.y += Math.sin(this.direction) * this.movementSpeed;
-
-        if(this.x < 10 || this.x > width - 10){
-
+        
+        if(this.x < 0){
+            this.x = width;
+        } 
+        if(this.x > width){
+            this.x = 0;
         }
-        if(this.y < 10 || this.y > height - 10){
-            
+        if(this.y < 0){
+            this.y = height;
         }
+        if(this.y > height){
+            this.y = 0;
+        }
+    }
+    display(){
+        var size = this.killRange // to display kill range
+        fill(230, 30, 60);
+        ellipse(this.x, this.y, 20, 20);
+        fill(230, 30, 60, 127); // same color semi transparent
+        ellipse(this.x, this.y, size * 2, size * 2);
     }
 }
 class Dot{
@@ -273,7 +346,6 @@ class Brain{
                 operatorToChange = operatorOptions[Math.floor(Math.random() * operatorOptions.length)];
             } else{
                 //resonse
-                console.log(conditionToChange);
                 conditionToChange["result"][1] += Math.random() / 2 - 0.25;
             }
         }
